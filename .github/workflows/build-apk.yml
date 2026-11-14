@@ -1,0 +1,93 @@
+name: SEGOY APK BUILDER
+
+on:
+  workflow_dispatch:
+    inputs:
+      website:
+        description: "URL Website"
+        required: true
+        type: string
+
+      app_name:
+        description: "Nama Aplikasi"
+        required: true
+        type: string
+
+      package_id:
+        description: "Package ID"
+        required: true
+        type: string
+
+      version:
+        description: "Versi Aplikasi"
+        required: true
+        default: "1.0.0"
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create Capacitor Project
+        env:
+          WEBSITE: ${{ inputs.website }}
+          APP_NAME: ${{ inputs.app_name }}
+          PACKAGE_ID: ${{ inputs.package_id }}
+          APP_VERSION: ${{ inputs.version }}
+        run: |
+          mkdir segoy-build
+          cd segoy-build
+
+          npm init -y
+
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+          mkdir www
+
+          echo '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body></body></html>' > www/index.html
+
+          npx cap init "$APP_NAME" "$PACKAGE_ID" --web-dir=www
+
+          cat > capacitor.config.json <<EOF
+          {
+            "appId": "$PACKAGE_ID",
+            "appName": "$APP_NAME",
+            "webDir": "www",
+            "server": {
+              "url": "$WEBSITE",
+              "cleartext": false
+            }
+          }
+          EOF
+
+          npm pkg set version="$APP_VERSION"
+
+          npx cap add android
+          npx cap sync android
+
+      - name: Build Android APK
+        run: |
+          cd segoy-build/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SEGOY-APK
+          path: segoy-build/android/app/build/outputs/apk/debug/app-debug.apk
